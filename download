@@ -1,16 +1,10 @@
-# never commit real case data
 registry-cases.json
-index-with-cases.html
 *-with-cases.html
-
-# stray git internals (accidentally uploaded before)
+index-with-cases.html
+# stray git internals if any got uploaded before
 HEAD
 COMMIT_EDITMSG
 config
 exclude
 description
 *.sample
-crypto.js
-download
-en.json
-e2e-smoke.mjs
