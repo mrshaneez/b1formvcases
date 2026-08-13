@@ -13006,7 +13006,14 @@ function setStaffScope(s){ staffScope = s; render(); }
 function mergeRequests(localList, incoming, tombstones){
   const byId = {};
   (localList||[]).forEach(r=>{ if(r&&r.id) byId[r.id]=r; });
-  (incoming||[]).forEach(r=>{ if(r&&r.id) byId[r.id]=r; });
+  (incoming||[]).forEach(r=>{
+    if(!r || !r.id) return;
+    const local = byId[r.id];
+    // Don't let an OLDER server copy overwrite a local edit that hasn't synced yet (protects a judge's
+    // unsynced target progress from being reverted by a stale server).
+    if(local && (local._unsent || (local.updatedAt && r.updatedAt && local.updatedAt > r.updatedAt))) return;
+    byId[r.id] = r;
+  });
   (tombstones||[]).forEach(id=>{ delete byId[id]; });
   return Object.values(byId);
 }
@@ -15895,6 +15902,28 @@ async function saveHearing(){
 }
 // Push case data to the server right now. Staff/admin push the full snapshot with the secret.
 // Judges (who don't hold the secret) push via their login so their scheduled hearings are saved too.
+// Fields a judge legitimately edits and syncs (must match the server's writable set).
+const JUDGE_WRITE_FIELDS = ['nextHearing','hearingTime','timeline','log','applications','stage','notes','tags','tasks','opinion','opinions','grants','summary','decision','verdict','result','flags','priority','closed','concluded'];
+// After a push, confirm the server ACTUALLY stored our edits. An out-of-date server can accept the
+// request but silently drop the general fields; without this check we'd wrongly mark data "synced"
+// and later overwrite it with the stale server copy. Returns true only if the server matches us.
+async function verifyJudgePush(pushed){
+  try{
+    if(!__sessionPw) return false;
+    const r = await backendCall({ action:'pullData', username: session.user, password: __sessionPw }, 12000);
+    if(!(r && r.ok && r.data && Array.isArray(r.data.cases))) return false;
+    const byId = {}; r.data.cases.forEach(c=>{ if(c && c.id) byId[c.id]=c; });
+    return (pushed||[]).every(pc=>{
+      if(!pc || !pc.id) return true;
+      const sc = byId[pc.id];
+      if(!sc) return false;                               // our case isn't on the server at all
+      return JUDGE_WRITE_FIELDS.every(f=>{
+        if(!(f in pc)) return true;                       // we didn't send this field
+        return JSON.stringify(pc[f] ?? null) === JSON.stringify(sc[f] ?? null);
+      });
+    });
+  }catch(e){ return false; }
+}
 async function pushHearingData(opts){
   opts = opts || {};
   try{
@@ -15912,8 +15941,25 @@ async function pushHearingData(opts){
       // this judge sits on the bench, so their edits (status, notes, hearings, applications, etc.)
       // reach the shared registry and other devices.
       const mine = (cases||[]).filter(x=>isPresiding(x) || canEditCase(x));
-      const r = await backendCall({ action:'pushCases', username: session.user, password: pw, cases: mine.length?mine:cases }, 15000);
-      if(r && r.ok){ window.__unsynced = false; persist({fromServer:true}); return true; }
+      const sent = mine.length ? mine : cases;
+      const r = await backendCall({ action:'pushCases', username: session.user, password: pw, cases: sent }, 15000);
+      if(r && r.ok){
+        // Only trust the sync if the server truly stored our edits. This prevents the "reverts on
+        // refresh" bug when the server is behind and drops fields it doesn't understand.
+        const stored = await verifyJudgePush(sent);
+        if(stored){
+          window.__unsynced = false; window.__serverStale = false;
+          persist({fromServer:true});
+          return true;
+        }
+        // Accepted but NOT persisted → server is out of date. Keep our edits protected locally
+        // (leave __unsynced set so nothing overwrites them) and warn the user once.
+        if(!window.__serverStale){
+          window.__serverStale = true;
+          toast('Saved on this device. The court server needs updating before changes sync between devices — ask your administrator to update the server.');
+        }
+        return false;
+      }
       if(r && r.error==='unauthorized'){ __sessionPw = null; try{localStorage.removeItem('b1_sess_pw');}catch(e){} }
     }
   }catch(e){}
@@ -16836,7 +16882,7 @@ function autoSyncTargets(){
     // their own channel (submitTarget / merge), and we must not block pulling case updates from others.
     persist({noDirty:true});
     if(backendConfigured() && typeof pushTargetToServer==='function'){
-      changedIds.forEach(id=>{ const t = targetById(id); if(t){ try{ pushTargetToServer(t); }catch(e){} } });
+      changedIds.forEach(id=>{ const t = targetById(id); if(t){ (async()=>{ try{ const r = await pushTargetToServer(t); if(r && r.ok){ t._unsent=false; } }catch(e){} })(); } });
     }
   }finally{ __autoSyncTargetsBusy = false; }
 }
@@ -17064,7 +17110,7 @@ async function saveTarget(){
   rec._unsent = !res.ok && res.reason!=='nobackend';
   await persist();
   targetDlg.close();
-  toast(res._unsent ? 'Saved on this device \u2014 will sync when possible' : (__targetEditId?'Target updated':'Target created'));
+  toast(rec._unsent ? 'Saved on this device \u2014 will sync when possible' : (__targetEditId?'Target updated':'Target created'));
   __targetEditId = null;
 }
 
