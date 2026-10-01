@@ -15988,8 +15988,12 @@ function render(){
         <div class="delta">presiding + participating</div></div>`;
   })() : '';
   document.getElementById('stats').innerHTML =
-    // Top row removed per request: Active caseload, All cases, Cases I participate in, Edit access
-    // granted, My opinion awaited, Hearing not started, Hearing in progress, Awaiting judgment.
+    benchCard +
+    (benchCardsInline() ? benchStatTilesHtml() : '') +
+    (isJudgeUser() ? '' : card('', 'All cases', `${activeTotal}${anyFilter?`<span class="of"> / ${fullActive}</span>`:''}`, 's-marine', anyFilter?'Filtered view':'Active caseload')) +
+    card('Not Started', 'Hearing not started', c['Not Started']||0, 's-red', 'Awaiting first sitting') +
+    card('In Progress', 'Hearing in progress', c['In Progress']||0, 's-amber', 'Sittings underway') +
+    card('Hearings Finished', 'Awaiting judgment', c['Hearings Finished']||0, 's-marine', 'Hearings concluded') +
     stageCard('Judgment Drafting', 'Judgment drafting', 's-gold', 'Judgment being written') +
     sharedOpinionTiles() +
     stageCard('Ready for Verdict', 'Ready for verdict', 's-blue', isJudgeUser()?'My drafts, opinions in \u00b7 open Chambers':'Opinions received \u00b7 ready to rule', 'completed', isJudgeUser()?dashCC.readyForVerdict:null) +
