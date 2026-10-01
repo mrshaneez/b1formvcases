@@ -179,6 +179,7 @@
   .stat.s-blue::before{background:#3a6b8a;}
   .stat.on{outline:2px solid var(--ink);outline-offset:-2px;}
   .stat .lab{font-size:12.5px;color:var(--slate);font-weight:500;}
+  #stats .stat:nth-child(-n+9) .lab{display:none;}   /* title line hidden on the first 9 dashboard stat cards per request */
   .stat .num{font-family:'Fraunces',serif;font-size:32px;font-weight:600;margin-top:6px;line-height:1;}
   .stat .num .of{font-size:15px;color:var(--slate);font-weight:400;}
   .stat .delta{font-size:12px;margin-top:7px;color:var(--slate);}
