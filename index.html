@@ -4939,9 +4939,34 @@ function render(){
         <div class="num">${allActive}</div>
         <div class="delta">presiding + participating</div></div>`;
   })() : '';
-  // Top row of stat tiles removed per request \u2014 the whole #stats tile row is cleared/hidden.
-  // Everything below the tiles (bench panel, charts, Orders issued, panels) is left untouched.
-  { const se = document.getElementById('stats'); if(se){ se.innerHTML = ''; se.style.display = 'none'; } }
+  document.getElementById('stats').innerHTML =
+    benchCard +
+    (benchCardsInline() ? benchStatTilesHtml() : '') +
+    (isJudgeUser() ? '' : card('', 'All cases', `${activeTotal}${anyFilter?`<span class="of"> / ${fullActive}</span>`:''}`, 's-marine', anyFilter?'Filtered view':'Active caseload')) +
+    card('Not Started', 'Hearing not started', c['Not Started']||0, 's-red', 'Awaiting first sitting') +
+    card('In Progress', 'Hearing in progress', c['In Progress']||0, 's-amber', 'Sittings underway') +
+    card('Hearings Finished', 'Awaiting judgment', c['Hearings Finished']||0, 's-marine', 'Hearings concluded') +
+    stageCard('Judgment Drafting', 'Judgment drafting', 's-gold', 'Judgment being written') +
+    sharedOpinionTiles() +
+    stageCard('Ready for Verdict', 'Ready for verdict', 's-blue', isJudgeUser()?'My drafts, opinions in \u00b7 open Chambers':'Opinions received \u00b7 ready to rule', 'completed', isJudgeUser()?dashCC.readyForVerdict:null) +
+    (()=>{
+      // Judges now see the live Chambers numbers on the "Shared for opinion" and "Ready for verdict"
+      // cards above (awaiting_others and completed), so we no longer repeat "Report: with judges" /
+      // "Report: opinions done" here. Staff/admin (no Chambers docket) keep a report-stage card.
+      if(!isJudgeUser()){
+        return rcard('Circulated for opinions', 'With judges', rc['Circulated for opinions']||0, 's-gold', 'Opinions awaited');
+      }
+      return '';
+    })() +
+    (()=>{
+      const cy = filtered.filter(concludedThisYear);
+      const vj = cy.filter(x=>x.stage==='Verdict Done').length;
+      const wt = cy.length - vj;
+      return `<div class="stat s-green ${concludedFilter?'on':''}" onclick="toggleConcluded()">
+        <div class="lab">Concluded in ${new Date().getFullYear()}</div>
+        <div class="num">${cy.length}</div>
+        <div class="delta">${vj} judgment${vj===1?'':'s'} \u00b7 ${wt} withdrawn / transferred</div></div>`;
+    })();
 
   const chipDefs = [['Not Started','Not started'],['In Progress','In progress'],['Hearings Finished','Hearings finished'],['Judgment Drafting','Judgment drafting'],['Shared for Opinion','Shared for opinion'],['Ready for Verdict','Ready for verdict'],['On Hold','On hold'],['Verdict Done','Verdict done'],['Withdrawn','Withdrawn'],['Transferred Out','Transferred out']];
   const showBenchChip = _u && _u.role==='admin';
