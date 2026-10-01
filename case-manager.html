@@ -15987,27 +15987,9 @@ function render(){
         <div class="num">${allActive}</div>
         <div class="delta">presiding + participating</div></div>`;
   })() : '';
-  document.getElementById('stats').innerHTML =
-    // Removed per request: Active caseload, All cases, Cases I participate in, Edit access granted,
-    // My opinion awaited, Hearing not started, Hearing in progress, Awaiting judgment, Judgment
-    // drafting and Ready for verdict. The per-type "Shared for opinion" tiles are kept.
-    sharedOpinionTiles() +
-    (()=>{
-      // Staff/admin (no Chambers docket) keep a report-stage card.
-      if(!isJudgeUser()){
-        return rcard('Circulated for opinions', 'With judges', rc['Circulated for opinions']||0, 's-gold', 'Opinions awaited');
-      }
-      return '';
-    })() +
-    (()=>{
-      const cy = filtered.filter(concludedThisYear);
-      const vj = cy.filter(x=>x.stage==='Verdict Done').length;
-      const wt = cy.length - vj;
-      return `<div class="stat s-green ${concludedFilter?'on':''}" onclick="toggleConcluded()">
-        <div class="lab">Concluded in ${new Date().getFullYear()}</div>
-        <div class="num">${cy.length}</div>
-        <div class="delta">${vj} judgment${vj===1?'':'s'} \u00b7 ${wt} withdrawn / transferred</div></div>`;
-    })();
+  // Top row of stat tiles removed per request \u2014 the whole #stats tile row is cleared/hidden.
+  // Everything below the tiles (bench panel, charts, Orders issued, panels) is left untouched.
+  { const se = document.getElementById('stats'); if(se){ se.innerHTML = ''; se.style.display = 'none'; } }
 
   const chipDefs = [['Not Started','Not started'],['In Progress','In progress'],['Hearings Finished','Hearings finished'],['Judgment Drafting','Judgment drafting'],['Shared for Opinion','Shared for opinion'],['Ready for Verdict','Ready for verdict'],['On Hold','On hold'],['Verdict Done','Verdict done'],['Withdrawn','Withdrawn'],['Transferred Out','Transferred out']];
   const showBenchChip = _u && _u.role==='admin';
@@ -16308,8 +16290,6 @@ function benchStatTilesHtml(){
 // section's stat cards (not mixed into the inline stats grid).
 function renderJudgeBenchCard(){
   const el = document.getElementById('judgeBenchCard'); if(!el) return;
-  el.innerHTML = ''; return;   // "Cases I participate in" card removed per request
-  // eslint-disable-next-line no-unreachable
   const u = me();
   if(!(u && u.role==='judge')){ el.innerHTML = ''; return; }
   if(benchCardsInline()){ el.innerHTML = ''; return; }   // pinned into the top stat pile instead
@@ -16364,8 +16344,6 @@ function renderParticipating(){
 }
 function renderBenchPanel(){
   const wrap = document.getElementById('benchWrap'); if(!wrap) return;
-  wrap.style.display='none'; wrap.innerHTML=''; return;   // "Edit access granted" / "My opinion awaited" cards removed per request
-  // eslint-disable-next-line no-unreachable
   const u = me();
   if(!u || !(u.role==='judge' || u.role==='admin')){ wrap.style.display='none'; return; }
   if(u.role==='judge' && benchCardsInline()){ wrap.style.display='none'; return; }   // cards pinned to the top pile
@@ -16499,7 +16477,10 @@ function renderDash(){
   document.getElementById('miniHearings').innerHTML = upcomingItems().slice(0,4).map(hearingRow).join('') || '<div class="empty">Nothing scheduled.</div>';
   if(typeof renderJudgeBenchCard==='function') renderJudgeBenchCard();
   renderBenchPanel();
-  (function(){ const bm = document.getElementById('benchMergeBtn'); if(!bm) return; bm.style.display='none'; })();  // bench cards removed per request
+  (function(){ const bm = document.getElementById('benchMergeBtn'); if(!bm) return; const u = me();
+    if(u && u.role==='judge'){ bm.style.display=''; bm.textContent = benchCardsInline() ? 'Separate my cards' : 'Merge my cards into the top'; bm.title = benchCardsInline() ? 'Move these three cards back into their own panel' : 'Pin Cases I participate in, Edit access granted and My opinion awaited to the top row'; }
+    else bm.style.display='none';
+  })();
   renderTaskPanel();
   if(typeof updateLangToggle==='function') updateLangToggle();
   if(typeof updateSyncStatus==='function') updateSyncStatus();
