@@ -179,6 +179,7 @@
   .stat.s-blue::before{background:#3a6b8a;}
   .stat.on{outline:2px solid var(--ink);outline-offset:-2px;}
   .stat .lab{font-size:12.5px;color:var(--slate);font-weight:500;}
+  #stats .stat:nth-child(-n+9) .lab{display:none;}   /* title line removed from the first 9 dashboard stat cards per request */
   .stat .num{font-family:'Fraunces',serif;font-size:32px;font-weight:600;margin-top:6px;line-height:1;}
   .stat .num .of{font-size:15px;color:var(--slate);font-weight:400;}
   .stat .delta{font-size:12px;margin-top:7px;color:var(--slate);}
@@ -15988,12 +15989,8 @@ function render(){
         <div class="delta">presiding + participating</div></div>`;
   })() : '';
   document.getElementById('stats').innerHTML =
-    benchCard +
-    (benchCardsInline() ? benchStatTilesHtml() : '') +
-    (isJudgeUser() ? '' : card('', 'All cases', `${activeTotal}${anyFilter?`<span class="of"> / ${fullActive}</span>`:''}`, 's-marine', anyFilter?'Filtered view':'Active caseload')) +
-    card('Not Started', 'Hearing not started', c['Not Started']||0, 's-red', 'Awaiting first sitting') +
-    card('In Progress', 'Hearing in progress', c['In Progress']||0, 's-amber', 'Sittings underway') +
-    card('Hearings Finished', 'Awaiting judgment', c['Hearings Finished']||0, 's-marine', 'Hearings concluded') +
+    // Top row removed per request: Active caseload, All cases, Cases I participate in, Edit access
+    // granted, My opinion awaited, Hearing not started, Hearing in progress, Awaiting judgment.
     stageCard('Judgment Drafting', 'Judgment drafting', 's-gold', 'Judgment being written') +
     sharedOpinionTiles() +
     stageCard('Ready for Verdict', 'Ready for verdict', 's-blue', isJudgeUser()?'My drafts, opinions in \u00b7 open Chambers':'Opinions received \u00b7 ready to rule', 'completed', isJudgeUser()?dashCC.readyForVerdict:null) +
