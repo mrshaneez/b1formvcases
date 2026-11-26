@@ -4645,11 +4645,34 @@ const CASE_CATEGORIES = [
   ['labour','Labour / employment'],
   ['commercial','Commercial'],
   ['maritime','Maritime'],
+  ['election','Election'],
   ['other','Other'],
 ];
 const CAT_LABEL = Object.fromEntries(CASE_CATEGORIES);
 function catLabel(k){ return CAT_LABEL[k] || (k||''); }
-function caseCategory(x){ return (x && x.category) ? x.category : ''; }
+// Auto-classify a case into a category from its Dhivehi "Case type" text. Returns a category key
+// or '' when nothing matches. Rules are ordered most-specific first; the first match wins. This is
+// only a suggestion — an explicit x.category always overrides it (see caseCategory).
+function autoCategory(x){
+  const t = String((x && x.type) || ''); if(!t) return '';
+  const has = (...ws) => ws.some(w => t.indexOf(w) !== -1);
+  // Criminal — offences & prosecutions
+  if(has('ޚިޔާނަތް','ޓްރެފިކް','މަސްތުވާ','ޑައިމޯފިން','ކެނެބިސް','ކެނަބިސް','ޓެރަރިޒަމް','ކްރިމިނަލް','މެރުން','މަރާލު','މާރާމާރީ','ރިޝްވަތު','އޮރިޔާން','ރޭޕް','ޖިންސީ','މަކަރާ','މަނީލޯންޑަރ','ސިއްރުން މުދާ','ސައްޙަނޫން','ކުށްކުރާ ގުރޫޕް','ނަހަމަ','ބިރުދައްކަ','ހަތިޔާރު','ކުޑަކުއްޖަކާ','ކުޑަކުދިންގެ ޙައްޤު','ޤަޞްދުގައި','ހެކި ހާމަ')) return 'criminal';
+  if(has('ޓެކްސް','ޓެކުން')) return 'tax';
+  if(has('ދުސްތޫރީ','ޤާނޫނުއަސާސީ')) return 'constitutional';
+  if(has('އިބްތިޚާބީ','އިންތިޚާބީ')) return 'election';
+  if(has('ގެވެށި','ތަރިކަ','ޢާއިލީ','ކައިވެނި','ވަރި','ޙަޟާނާ','ބެލެނިވެރި')) return 'family';
+  if(has('ވަޒީފާ')) return 'labour';
+  if(has('އިދާރީ','ޖުޑީޝަލް ރިވިއު','ޖުޑީޝަލް ރިވިޢު','ރިވިއު','ރިވިޢު','އިންފޮމޭޝަން ކޮމިޝަނަރ','ރަޖިސްޓްރާރ')) return 'administrative';
+  if(has('ދޯނި','ދޯނީ','އުޅަނދު')) return 'maritime';
+  // Civil — the broad default for private-law disputes
+  if(has('ބަދަލު','އެއްބަސްވުން','އެއްބަސްވުމާ','އެގްރީމެންޓް','އެގްރީމަންޓް','ފައިސާ','މުދަލާއި','ޚިދުމަތުގެ އަގު','ރަހުނު','ލޯނު','ތަންފީޒު','ތަންފީޛު','ކުއްޔަށް','ބިމާއި','މިލްކުވެރިކަން','ޗެކް','ޗެކު','އިންޝުއަރެންސް','މަދަނީ','ވަގުތީ އަމުރ','ޙިއްޞާ','ދަޢުވާ','ޙައްޤު')) return 'civil';
+  return '';
+}
+// Effective category: the user's explicit choice if set, otherwise the auto-detected one.
+function caseCategory(x){ return (x && x.category) ? x.category : autoCategory(x); }
+// Whether this case's category came from auto-detection (no manual value set).
+function categoryIsAuto(x){ return !(x && x.category) && !!autoCategory(x); }
 function categoryCount(key){ try{ return vcases().filter(x=>caseCategory(x)===key).length; }catch(e){ return 0; } }
 // Toggle the category filter and jump to the Cases list (used by the dashboard/overview chips).
 function setCatFilter(key){ const el=document.getElementById('filterCat'); if(el) el.value=(el.value===key?'':key); if(currentView!=='cases') show('cases'); render(); }
@@ -6236,7 +6259,7 @@ function detailReadOnly(x, judgeMode){
     </div>`:''}
     <div class="form-sec">
       <h3><span class="n">1</span> Case details</h3>
-      ${roRow('Case number', x.caseNo)}${roRow('Case type', x.type)}${x.category?roRow('Category', catLabel(x.category)):''}${roRow('Stage', x.stage)}
+      ${roRow('Case number', x.caseNo)}${roRow('Case type', x.type)}${caseCategory(x)?roRow('Category', catLabel(caseCategory(x))+(categoryIsAuto(x)?' (auto)':'')):''}${roRow('Stage', x.stage)}
       ${roRow('Report', reportSummary(x).replace('Report: ',''))}${roRow('Next hearing', x.nextHearing?fmtDate(x.nextHearing):'')}
     </div>
     <div class="form-sec">
@@ -6276,7 +6299,7 @@ function detailHtml(x){
         <div class="field"><label>Next hearing date</label><input type="date" value="${esc(x.nextHearing)}" onchange="upd('${x.id}','nextHearing',this.value)"></div>
         <div class="field"><label>Conclude by (due date)</label><input type="date" value="${esc(x.dueDate||'')}" onchange="upd('${x.id}','dueDate',this.value)"></div>
         <div class="field"><label>Case type</label><input type="text" class="thaana" dir="auto" value="${esc(x.type)}" onchange="upd('${x.id}','type',this.value)"></div>
-        <div class="field"><label>Category</label><select onchange="upd('${x.id}','category',this.value)"><option value="">— not set —</option>${CASE_CATEGORIES.map(([k,l])=>`<option value="${k}" ${k===(x.category||'')?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="field"><label>Category</label><select onchange="upd('${x.id}','category',this.value)"><option value="" ${!x.category?'selected':''}>${autoCategory(x)?`Auto — ${esc(catLabel(autoCategory(x)))}`:'— not set —'}</option>${CASE_CATEGORIES.map(([k,l])=>`<option value="${k}" ${k===(x.category||'')?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field"><label>Year</label><input type="text" value="${esc(x.year)}" onchange="upd('${x.id}','year',this.value)"></div>
       </div>
     </div>
