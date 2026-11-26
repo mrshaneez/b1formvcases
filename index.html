@@ -1233,6 +1233,7 @@
       <div class="field"><label>Priority</label><select id="filterPri"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select></div>
       <div class="field"><label>Year</label><select id="filterYear"><option value="">All years</option></select></div>
       <div class="field"><label>Case type</label><select id="filterType" class="thaana" dir="auto"><option value="">All types</option></select></div>
+      <div class="field"><label>Category</label><select id="filterCat"><option value="">All categories</option></select></div>
       <div class="field"><label>Appellant</label><select id="filterApp" class="thaana" dir="auto"><option value="">All appellants</option></select></div>
       <div class="field"><label>Respondent</label><select id="filterRes" class="thaana" dir="auto"><option value="">All respondents</option></select></div>
       <div class="field"><label>Intervening party</label><select id="filterInt" class="thaana" dir="auto"><option value="">All intervenors</option></select></div>
@@ -4255,6 +4256,8 @@ function refreshFilterOptions(){
   stSel.innerHTML = '<option value="">All stages</option>' + STAGES.map(s=>`<option ${s===keepS?'selected':''}>${s}</option>`).join('');
   const orSel = document.getElementById('filterOrder');
   if(orSel){ const keepO=orSel.value; orSel.innerHTML = '<option value="">All orders</option><option value="__any__">Any order issued</option>' + APP_TYPES.map(t=>{const n=orderIssuedCount(t.key);return `<option value="${t.key}">${esc(t.en)}${n?` (${n})`:''}</option>`;}).join(''); orSel.value=keepO; }
+  const catSel = document.getElementById('filterCat');
+  if(catSel){ const keepC=catSel.value; catSel.innerHTML = '<option value="">All categories</option><option value="__none__">Uncategorised</option>' + CASE_CATEGORIES.map(([k,l])=>{const n=categoryCount(k);return `<option value="${k}">${esc(l)}${n?` (${n})`:''}</option>`;}).join(''); catSel.value=keepC; }
 }
 
 function durText(a, b){
@@ -4628,12 +4631,36 @@ function toggleConcluded(){
   if(currentView!=='cases') show('cases');
   render();
 }
+// Case categories — the broad legal classification of a matter (criminal, civil, family, …),
+// distinct from the free-text "Case type" (the Dhivehi subject). Stored on x.category as the key.
+const CASE_CATEGORIES = [
+  ['criminal','Criminal'],
+  ['civil','Civil'],
+  ['family','Family'],
+  ['tax','Tax'],
+  ['monicon','Monicon'],
+  ['constitutional','Constitutional'],
+  ['remanded','Remanded to High Court'],
+  ['administrative','Administrative'],
+  ['labour','Labour / employment'],
+  ['commercial','Commercial'],
+  ['maritime','Maritime'],
+  ['other','Other'],
+];
+const CAT_LABEL = Object.fromEntries(CASE_CATEGORIES);
+function catLabel(k){ return CAT_LABEL[k] || (k||''); }
+function caseCategory(x){ return (x && x.category) ? x.category : ''; }
+function categoryCount(key){ try{ return vcases().filter(x=>caseCategory(x)===key).length; }catch(e){ return 0; } }
+// Toggle the category filter and jump to the Cases list (used by the dashboard/overview chips).
+function setCatFilter(key){ const el=document.getElementById('filterCat'); if(el) el.value=(el.value===key?'':key); if(currentView!=='cases') show('cases'); render(); }
+
 function getFilters(){
   return {
     q: (document.getElementById('search').value||'').toLowerCase(),
     pri: document.getElementById('filterPri').value,
     yr: document.getElementById('filterYear').value,
     ty: document.getElementById('filterType').value,
+    cat: (document.getElementById('filterCat')||{}).value||'',
     fap: document.getElementById('filterApp').value,
     fre: document.getElementById('filterRes').value,
     fin: document.getElementById('filterInt').value,
@@ -4659,6 +4686,7 @@ function facetCases(excl){
     .filter(x => !F.ord || (F.ord==='__any__' ? caseOrdersIssued(x).length>0 : caseOrdersIssued(x).includes(F.ord)))
     .filter(x => excl==='year' || !F.yr || String(x.year)===F.yr)
     .filter(x => excl==='type' || !F.ty || x.type===F.ty)
+    .filter(x => excl==='cat' || !F.cat || (F.cat==='__none__' ? !caseCategory(x) : caseCategory(x)===F.cat))
     .filter(x => !F.fap || allNames(x,'appellants').includes(F.fap))
     .filter(x => !F.fre || allNames(x,'respondents').includes(F.fre))
     .filter(x => !F.fin || allNames(x,'intervenors').includes(F.fin))
@@ -4884,6 +4912,7 @@ function render(){
     .filter(x => !F.ord || (F.ord==='__any__' ? caseOrdersIssued(x).length>0 : caseOrdersIssued(x).includes(F.ord)))
     .filter(x => !F.yr || String(x.year)===F.yr)
     .filter(x => !F.ty || x.type===F.ty)
+    .filter(x => !F.cat || (F.cat==='__none__' ? !caseCategory(x) : caseCategory(x)===F.cat))
     .filter(x => !F.fap || allNames(x,'appellants').includes(F.fap))
     .filter(x => !F.fre || allNames(x,'respondents').includes(F.fre))
     .filter(x => !F.fin || allNames(x,'intervenors').includes(F.fin))
@@ -4892,8 +4921,8 @@ function render(){
     .filter(x => !F.frs || (x.report&&x.report.stage)===F.frs)
     .filter(x => !F.fop || opinionJudges(x).some(j=>j.name===F.fop && j.opinion!=='given' && ['Drafting','Circulated for opinions'].includes(x.report.stage)))
     .filter(x => !F.q || [x.caseNo,x.type,x.notes,...allNames(x,'appellants'),...allNames(x,'respondents'),...allNames(x,'intervenors'),...allLawyers(x),...benchNames(x)].join(' ').toLowerCase().includes(F.q));
-  const anyFilter = !!(F.q||F.pri||F.yr||F.ty||F.fap||F.fre||F.fin||F.flw||F.fjd||F.frs||F.fop||F.ord);
-  const nf = [F.pri,F.yr,F.ty,F.fap,F.fre,F.fin,F.flw,F.fjd,F.frs,F.fop,F.ord,stageFilter].filter(Boolean).length;
+  const anyFilter = !!(F.q||F.pri||F.yr||F.ty||F.cat||F.fap||F.fre||F.fin||F.flw||F.fjd||F.frs||F.fop||F.ord);
+  const nf = [F.pri,F.yr,F.ty,F.cat,F.fap,F.fre,F.fin,F.flw,F.fjd,F.frs,F.fop,F.ord,stageFilter].filter(Boolean).length;
   document.getElementById('filterCount').textContent = nf || '';
 
   const c = {};
@@ -4979,6 +5008,7 @@ function render(){
     .filter(([s])=>!s || (c[s]||0) > 0 || ['Not Started','In Progress','Hearings Finished','Verdict Done','On Hold','Withdrawn','Transferred Out'].includes(s))
     .map(([s,l])=>`<button class="chip ${!benchFilter && stageFilter===s?'on':''}" onclick="setStage('${s}')">${l}${s?` \u00b7 ${c[s]||0}`:''}</button>`).join('');
   { const box=document.getElementById('chips'); const cur=(document.getElementById('filterOrder')||{}).value||''; const oc=APP_TYPES.map(t=>[t,orderIssuedCount(t.key)]).filter(a=>a[1]>0); if(box&&oc.length){ box.insertAdjacentHTML('beforeend','<span style="width:1px;height:20px;background:var(--line-strong);margin:0 2px;"></span>'+oc.map(([t,n])=>`<button class="chip ${cur===t.key?'on':''}" title="Cases with a ${esc(t.en)} issued" onclick="setOrderFilter('${t.key}')">\u2696 ${esc(t.en)} \u00b7 ${n}</button>`).join('')); } }
+  { const box=document.getElementById('chips'); const cur=(document.getElementById('filterCat')||{}).value||''; const cc=CASE_CATEGORIES.map(([k,l])=>[k,l,categoryCount(k)]).filter(a=>a[2]>0); if(box&&cc.length){ box.insertAdjacentHTML('beforeend','<span style="width:1px;height:20px;background:var(--line-strong);margin:0 2px;"></span>'+cc.map(([k,l,n])=>`<button class="chip ${cur===k?'on':''}" title="${esc(l)} cases" onclick="setCatFilter('${k}')">${esc(l)} · ${n}</button>`).join('')); } }
   renderJudgeScopeBar();
 
   // Bench access summary (folded in from the old "My cases" view) — shown only in bench mode
@@ -6206,7 +6236,7 @@ function detailReadOnly(x, judgeMode){
     </div>`:''}
     <div class="form-sec">
       <h3><span class="n">1</span> Case details</h3>
-      ${roRow('Case number', x.caseNo)}${roRow('Case type', x.type)}${roRow('Stage', x.stage)}
+      ${roRow('Case number', x.caseNo)}${roRow('Case type', x.type)}${x.category?roRow('Category', catLabel(x.category)):''}${roRow('Stage', x.stage)}
       ${roRow('Report', reportSummary(x).replace('Report: ',''))}${roRow('Next hearing', x.nextHearing?fmtDate(x.nextHearing):'')}
     </div>
     <div class="form-sec">
@@ -6246,6 +6276,7 @@ function detailHtml(x){
         <div class="field"><label>Next hearing date</label><input type="date" value="${esc(x.nextHearing)}" onchange="upd('${x.id}','nextHearing',this.value)"></div>
         <div class="field"><label>Conclude by (due date)</label><input type="date" value="${esc(x.dueDate||'')}" onchange="upd('${x.id}','dueDate',this.value)"></div>
         <div class="field"><label>Case type</label><input type="text" class="thaana" dir="auto" value="${esc(x.type)}" onchange="upd('${x.id}','type',this.value)"></div>
+        <div class="field"><label>Category</label><select onchange="upd('${x.id}','category',this.value)"><option value="">— not set —</option>${CASE_CATEGORIES.map(([k,l])=>`<option value="${k}" ${k===(x.category||'')?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field"><label>Year</label><input type="text" value="${esc(x.year)}" onchange="upd('${x.id}','year',this.value)"></div>
       </div>
     </div>
@@ -10336,13 +10367,13 @@ async function saveNotify(sendEmail){
 }
 function clearFiltersQuiet(){
   document.getElementById('search').value='';
-  ['filterPri','filterYear','filterStage','filterType','filterApp','filterRes','filterInt','filterLaw','filterJud','filterRep','filterOpn','filterOrder'].forEach(i=>{const e=document.getElementById(i); if(e) e.value='';});
+  ['filterPri','filterYear','filterStage','filterType','filterCat','filterApp','filterRes','filterInt','filterLaw','filterJud','filterRep','filterOpn','filterOrder'].forEach(i=>{const e=document.getElementById(i); if(e) e.value='';});
 }
 function clearFilters(){ clearFiltersQuiet(); stageFilter=''; concludedFilter=false; benchFilter=false; render(); }
 // True when any case filter is in effect (search text, a filter dropdown, or a stage/bench/concluded chip).
 function filtersActive(){
   const F = getFilters();
-  return !!(F.q || F.pri || F.yr || F.ty || F.fap || F.fre || F.fin || F.flw || F.fjd || F.frs || F.fop || F.ord || stageFilter || concludedFilter || benchFilter);
+  return !!(F.q || F.pri || F.yr || F.ty || F.cat || F.fap || F.fre || F.fin || F.flw || F.fjd || F.frs || F.fop || F.ord || stageFilter || concludedFilter || benchFilter);
 }
 function setStageQuiet(s){ stageFilter=s; document.getElementById('filterStage').value=s; }
 function setStage(s){ concludedFilter=false; benchFilter=false; if(s && stageFilter===s) s=''; setStageQuiet(s); render(); }
@@ -11450,7 +11481,7 @@ function scopeLabel(){
   else if(concludedFilter) parts.push('Concluded in '+new Date().getFullYear());
   else if(stageFilter) parts.push(stageFilter); else parts.push('Active cases');
   if(F.pri) parts.push(F.pri+' priority'); if(F.yr) parts.push(F.yr);
-  if(F.ty) parts.push(F.ty); if(F.fap) parts.push('Appellant: '+F.fap);
+  if(F.ty) parts.push(F.ty); if(F.cat) parts.push('Category: '+(F.cat==='__none__'?'Uncategorised':catLabel(F.cat))); if(F.fap) parts.push('Appellant: '+F.fap);
   if(F.fre) parts.push('Respondent: '+F.fre); if(F.fin) parts.push('Intervenor: '+F.fin);
   if(F.flw) parts.push('Lawyer: '+F.flw); if(F.fjd) parts.push('Judge: '+F.fjd);
   if(F.frs) parts.push('Report: '+F.frs); if(F.fop) parts.push('Opinion pending: '+F.fop);
@@ -11513,7 +11544,7 @@ function csvList(){
   }
 }
 document.getElementById('search').addEventListener('input', ()=>{ if(currentView!=='cases') show('cases'); render(); });
-['filterPri','filterYear','filterType','filterApp','filterRes','filterInt','filterLaw','filterJud','filterRep','filterOpn'].forEach(i=>document.getElementById(i).addEventListener('change', render));
+['filterPri','filterYear','filterType','filterCat','filterApp','filterRes','filterInt','filterLaw','filterJud','filterRep','filterOpn'].forEach(i=>document.getElementById(i).addEventListener('change', render));
 document.getElementById('filterStage').addEventListener('change', function(){ stageFilter=this.value; render(); });
 load();
 
