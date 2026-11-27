@@ -208,8 +208,11 @@
   .cols-time{height:150px;gap:4px;}
   .cols-time .colw .cl{font-size:10px;white-space:nowrap;}
   .cols-time .colw .bar{max-width:46px;border-radius:5px 5px 0 0;}
+  .cat-dot{display:inline-block;width:9px;height:9px;border-radius:3px;flex:0 0 auto;margin-inline-end:6px;vertical-align:middle;}
+  .cat-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--slate);}
+  .cat-leg{display:inline-flex;align-items:center;}
   .cat-chips{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;}
-  .cat-chips .chip{cursor:pointer;}
+  .cat-chips .chip{cursor:pointer;display:inline-flex;align-items:center;}
   .cat-chips .chip.dim{opacity:.4;}
   .colw.on .bar{outline:2px solid var(--ink);outline-offset:1px;}
   .colw.dim .bar{opacity:.35;}
@@ -4723,6 +4726,15 @@ const CASE_CATEGORIES = [
 ];
 const CAT_LABEL = Object.fromEntries(CASE_CATEGORIES);
 function catLabel(k){ return CAT_LABEL[k] || (k||''); }
+// A distinct colour per category, reused anywhere categories are shown (chips, concluded graph).
+const CATEGORY_COLORS = {
+  criminal:'#b3402f', civil:'#2f6f6b', family:'#8a5a9c', tax:'#c0871e',
+  monicon:'#6b4e7a', constitutional:'#3a6b8a', remanded:'#9a6a3a',
+  administrative:'#2f7a4d', labour:'#4b6b9a', commercial:'#a65a2a',
+  maritime:'#1f7a8c', election:'#a63f6f', other:'#7a8da0'
+};
+function catColor(k){ return (k==='__none__') ? '#b9c0c8' : (CATEGORY_COLORS[k] || '#9aa3ad'); }
+function catName(k){ return (k==='__none__') ? 'Uncategorised' : catLabel(k); }
 // Auto-classify a case into a category from its Dhivehi "Case type" text. Returns a category key
 // or '' when nothing matches. Rules are ordered most-specific first; the first match wins. This is
 // only a suggestion — an explicit x.category always overrides it (see caseCategory).
@@ -4863,7 +4875,7 @@ function renderCharts(){
   byCat.forEach(x=>{ const k = caseCategory(x); if(k) cc[k]=(cc[k]||0)+1; else uncat++; });
   const curCat = (document.getElementById('filterCat')||{}).value||'';
   const catList = CASE_CATEGORIES.map(([k,l])=>[k,l,cc[k]||0]).filter(a=>a[2]>0).sort((a,b)=>b[2]-a[2]);
-  const catChip = (k,l,n)=>`<button class="chip ${curCat===k?'on':''} ${curCat&&curCat!==k?'dim':''}" onclick="toggleCat('${k}')">${esc(l)} · ${n}</button>`;
+  const catChip = (k,l,n)=>`<button class="chip ${curCat===k?'on':''} ${curCat&&curCat!==k?'dim':''}" onclick="toggleCat('${k}')"><span class="cat-dot" style="background:${catColor(k)}"></span>${esc(l)} · ${n}</button>`;
   document.getElementById('chartType').innerHTML = (catList.length||uncat)
     ? `<div class="cat-chips">${catList.map(([k,l,n])=>catChip(k,l,n)).join('')}${uncat?catChip('__none__','Uncategorised',uncat):''}</div>`
     : '<div class="empty">No cases match.</div>';
@@ -4886,7 +4898,9 @@ function concludedDateOf(x){
 }
 function concludedBuckets(){
   const gran = concludedGran;
-  const dates = vcases().map(concludedDateOf).filter(Boolean);
+  const items = vcases().filter(x=>CONCLUDED_STAGES.includes(x.stage))
+    .map(x=>({ d: concludedDateOf(x), cat: caseCategory(x) || '__none__' })).filter(it=>it.d);
+  const dates = items.map(it=>it.d);
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4909,25 +4923,32 @@ function concludedBuckets(){
     for(let i=11;i>=0;i--){ const dt=new Date(now.getFullYear(), now.getMonth()-i, 1); const k=dt.getFullYear()+'-'+pad(dt.getMonth()+1);
       keys.push(k); labels[k]= MON[dt.getMonth()] + ((dt.getMonth()===0 || i===11) ? " '"+String(dt.getFullYear()).slice(-2) : ''); }
   }
-  const counts = {}; keys.forEach(k=>counts[k]=0);
-  let shown = 0;
-  dates.forEach(d=>{ const k=keyOf(d); if(k in counts){ counts[k]++; shown++; } });
-  return { keys, labels, counts, shown, grandTotal: dates.length };
+  const counts = {}; const catBy = {}; keys.forEach(k=>{ counts[k]=0; catBy[k]={}; });
+  const catsPresent = {}; let shown = 0;
+  items.forEach(it=>{ const k=keyOf(it.d); if(k in counts){ counts[k]++; shown++;
+    catBy[k][it.cat]=(catBy[k][it.cat]||0)+1; catsPresent[it.cat]=(catsPresent[it.cat]||0)+1; } });
+  return { keys, labels, counts, catBy, catsPresent, shown, grandTotal: dates.length };
 }
 function renderConcludedChart(){
   const el = document.getElementById('chartConcluded'); if(!el) return;
   const seg = document.getElementById('concludedSeg');
   if(seg) seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.g===concludedGran));
-  const { keys, labels, counts, grandTotal } = concludedBuckets();
+  const { keys, labels, counts, catBy, catsPresent, grandTotal } = concludedBuckets();
   const badge = document.getElementById('concludedTotBadge'); if(badge) badge.textContent = grandTotal ? String(grandTotal) : '';
   const max = Math.max(...keys.map(k=>counts[k]), 1);
+  const catOrder = CASE_CATEGORIES.map(([k])=>k).concat('__none__');
   el.innerHTML = keys.length ? `<div class="cols cols-time">
     ${keys.map(k=>{ const n=counts[k]; const H=n?Math.max(Math.round(n/max*100),3):0;
+      const segs = catOrder.filter(c=>catBy[k][c]).map(c=>
+        `<span class="ybar-seg" style="flex:${catBy[k][c]} 0 0;background:${catColor(c)}" title="${catName(c)}: ${catBy[k][c]}"></span>`).join('');
       return `<div class="colw" title="${labels[k]}: ${n} concluded">
         <span class="cv">${n||''}</span>
-        <div class="bar" style="height:${H}px">${n?`<span class="ybar-seg" style="flex:1;background:var(--ink)"></span>`:''}</div>
+        <div class="bar" style="height:${H}px">${segs}</div>
         <span class="cl">${labels[k]}</span></div>`; }).join('')}
-  </div>` : '<div class="empty">No concluded cases yet.</div>';
+  </div>
+  <div class="cat-legend">${catOrder.filter(c=>catsPresent[c]).map(c=>
+    `<span class="cat-leg"><span class="cat-dot" style="background:${catColor(c)}"></span>${catName(c)} · ${catsPresent[c]}</span>`).join('')}</div>`
+  : '<div class="empty">No concluded cases yet.</div>';
 }
 
 
