@@ -683,16 +683,33 @@
   --radius:16px;
   --shadow:0 1px 2px rgba(20,20,30,.05), 0 12px 30px -18px rgba(20,20,30,.20);
   --frame:0 1px 0 #fff inset, 0 30px 60px -30px rgba(20,20,30,.25), 0 2px 6px rgba(20,20,30,.06);
+  /* Sidebar follows the theme — light in light mode, dark in dark mode */
+  --side-bg:transparent; --side-fg:#3a3b3f; --side-fg-strong:#141414;
+  --side-hover:#EBECEE; --side-active-bg:#ffffff; --side-active-fg:#141414;
+  --side-active-shadow:0 1px 3px rgba(0,0,0,.08); --side-sep:var(--line); --side-label:#6b6c71;
 }
-[data-theme="dark"]{ --gold:#D4F45A; --gold-soft:#2c330f; }
+[data-theme="dark"]{
+  --gold:#D4F45A; --gold-soft:#2c330f;
+  --side-bg:#16181b; --side-fg:#aab4c0; --side-fg-strong:#f1f1ed;
+  --side-hover:rgba(255,255,255,.06); --side-active-bg:#2a2e33; --side-active-fg:#ffffff;
+  --side-active-shadow:none; --side-sep:rgba(255,255,255,.08); --side-label:#8a93a0;
+}
 
 /* Ground + cosmetics — apply at every width */
 body{background:radial-gradient(120% 80% at 50% 0%, #F1F2F4 0%, #E3E4E7 70%) fixed;}
 [data-theme="dark"] body{background:radial-gradient(120% 80% at 50% 0%, #1c2029 0%, #10131a 70%) fixed;}
 
-.nav a{border-radius:12px;}
-.nav a.active{background:#2a2a2c; color:#fff;}
+/* Theme-aware sidebar */
+.side{background:var(--side-bg); color:var(--side-fg);}
+.brand{border-bottom:1px solid var(--side-sep);}
+.brand-txt .wm{color:var(--side-fg-strong);}
+.nav-label{color:var(--side-label);}
+.nav a{border-radius:12px; color:var(--side-fg);}
+.nav a:hover{background:var(--side-hover); color:var(--side-fg-strong);}
+.nav a.active{background:var(--side-active-bg); color:var(--side-active-fg); box-shadow:var(--side-active-shadow);}
 .nav a .badge{background:var(--gold); color:#141414;}
+.side-foot{border-top:1px solid var(--side-sep);}
+.side-foot .who{color:var(--side-fg-strong);}
 
 .panel,.stat{border-radius:20px; border-color:var(--line); box-shadow:0 12px 30px -18px rgba(20,20,30,.18);}
 [data-theme="dark"] .panel,[data-theme="dark"] .stat{box-shadow:0 12px 30px -18px rgba(0,0,0,.6);}
