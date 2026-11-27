@@ -200,8 +200,9 @@
   .donut-seg.dim{opacity:.3;}
   .cols{display:flex;align-items:flex-end;gap:8px;height:130px;}
   .colw{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;min-width:0;}
-  .colw .bar{width:100%;max-width:34px;background:var(--marine);border-radius:4px 4px 0 0;transition:opacity .15s;}
-  .colw.on .bar{background:var(--gold);}
+  .colw .bar{width:100%;max-width:34px;background:var(--line);border-radius:4px 4px 0 0;overflow:hidden;display:flex;flex-direction:column;transition:opacity .15s;}
+  .colw .bar .ybar-seg{width:100%;flex-shrink:0;}
+  .colw.on .bar{outline:2px solid var(--ink);outline-offset:1px;}
   .colw.dim .bar{opacity:.35;}
   .colw .cv{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);}
   .colw .cl{font-size:11px;color:var(--slate);font-weight:600;}
@@ -4806,7 +4807,7 @@ function renderCharts(){
       stroke="${STAGE_COLORS[s]}" stroke-width="${on?21:17}"
       stroke-dasharray="${Math.max(len-1.5,0.5)} ${C-Math.max(len-1.5,0.5)}"
       stroke-dashoffset="${-acc}" transform="rotate(-90 60 60)"
-      onclick="setStage('${s}'===stageFilter?'':'${s}')"><title>${s}: ${n}</title></circle>`;
+      onclick="setStage('${s}'===stageFilter?'':'${s}')"><title>${s}: ${n} (${Math.round(n/total*100)}%)</title></circle>`;
     acc += len;
   });
   const scopeEl = document.getElementById('donutScope');
@@ -4816,19 +4817,26 @@ function renderCharts(){
       <text x="60" y="57" text-anchor="middle" font-family="Fraunces,serif" font-size="24" font-weight="600" fill="#122033">${total}</text>
       <text x="60" y="73" text-anchor="middle" font-size="9" fill="#54677b" letter-spacing="1">${(donutClosed || (stageFilter && !ACTIVE_STAGES.includes(stageFilter)))?'CASES':'ACTIVE'}</text></svg>
     <div class="legend">${entries.map(([s,n])=>`<div class="leg-row ${stageFilter===s?'on':''} ${stageFilter&&stageFilter!==s?'dim':''}" onclick="setStage('${s}'===stageFilter?'':'${s}')">
-      <span class="leg-dot" style="background:${STAGE_COLORS[s]}"></span>${s}<span class="lc">${n}</span></div>`).join('')}</div>
+      <span class="leg-dot" style="background:${STAGE_COLORS[s]}"></span>${s}<span class="lc">${n} · ${Math.round(n/total*100)}%</span></div>`).join('')}</div>
   </div>` : '<div class="empty">No cases match.</div>';
 
-  // --- year columns ---
+  // --- year columns (stacked & coloured by stage) ---
   const byYear = facetCases('year');
-  const yc = {}; byYear.forEach(x=>{ const y = String(x.year||'').trim(); if(y) yc[y]=(yc[y]||0)+1; });
+  const yStage = {}; const yc = {};
+  byYear.forEach(x=>{ const y = String(x.year||'').trim(); if(!y) return;
+    (yStage[y]=yStage[y]||{})[x.stage]=(yStage[y][x.stage]||0)+1; yc[y]=(yc[y]||0)+1; });
   const years = Object.keys(yc).sort();
   const maxY = Math.max(...years.map(y=>yc[y]), 1);
   document.getElementById('chartYear').innerHTML = years.length ? `<div class="cols">
-    ${years.map(y=>`<div class="colw ${F.yr===y?'on':''} ${F.yr&&F.yr!==y?'dim':''}" onclick="toggleYear('${y}')">
+    ${years.map(y=>{
+      const H = Math.max(Math.round(yc[y]/maxY*100),4);
+      const segs = STAGES.filter(s=>yStage[y][s]).map(s=>
+        `<span class="ybar-seg" style="flex:${yStage[y][s]} 0 0;background:${STAGE_COLORS[s]}" title="${s}: ${yStage[y][s]}"></span>`).join('');
+      return `<div class="colw ${F.yr===y?'on':''} ${F.yr&&F.yr!==y?'dim':''}" onclick="toggleYear('${y}')">
       <span class="cv">${yc[y]}</span>
-      <div class="bar" style="height:${Math.max(Math.round(yc[y]/maxY*100),4)}px"></div>
-      <span class="cl">${y.slice(-2)}</span></div>`).join('')}
+      <div class="bar" style="height:${H}px">${segs}</div>
+      <span class="cl">${y.slice(-2)}</span></div>`;
+    }).join('')}
   </div>` : '<div class="empty">No cases match.</div>';
 
   // --- type horizontal bars ---
