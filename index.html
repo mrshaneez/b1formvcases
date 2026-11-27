@@ -8,7 +8,7 @@
 <script src="https://res.cdn.office.net/teams-js/2.24.0/js/MicrosoftTeams.min.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* Embedded Thaana fonts — Dhivehi renders on iPhone/iPad with nothing installed.
      unicode-range limits them to Thaana + Arabic, so Latin keeps the ICMS fonts. */
@@ -649,6 +649,67 @@
     #printArea tr{page-break-inside:avoid;}
   }
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+<style id="redesign2026">
+/* ============================================================================
+   Artifact-inspired re-theme — soft grey ground, rounded framed shell, near-black
+   rail-style sidebar, lime accent, black pill buttons, soft rounded cards, tight
+   sans stat numbers. Layout and Dhivehi (Faruma) are untouched. Light mode is the
+   primary target; dark mode keeps its own base and just borrows the lime accent.
+   ========================================================================== */
+:root{
+  --ink:#141414; --ink-2:#2a2e35;
+  --slate:#55565b; --slate-2:#6b6c71;
+  --parchment:#E8E9EC; --paper:#ffffff;
+  --line:#ECEDEF; --line-strong:#E0E1E4;
+  --marine:#141414; --marine-ink:#000000;
+  --gold:#D4F45A; --gold-soft:#eef6c7;
+  --wash:#F4F4F5; --chrome:#141414;
+  --radius:16px;
+  --shadow:0 1px 2px rgba(20,20,30,.05), 0 12px 30px -18px rgba(20,20,30,.20);
+  --frame:0 1px 0 #fff inset, 0 30px 60px -30px rgba(20,20,30,.25), 0 2px 6px rgba(20,20,30,.06);
+}
+[data-theme="dark"]{ --gold:#D4F45A; --gold-soft:#2c330f; }
+
+html,body{height:100%;}
+body{background:radial-gradient(120% 80% at 50% 0%, #F1F2F4 0%, #E3E4E7 70%) fixed; padding:14px;}
+[data-theme="dark"] body{background:radial-gradient(120% 80% at 50% 0%, #1c2029 0%, #10131a 70%) fixed;}
+.app{height:calc(100vh - 28px); min-height:0; border-radius:24px; overflow:hidden; background:var(--wash);
+  border:1px solid rgba(255,255,255,.7); box-shadow:var(--frame);}
+[data-theme="dark"] .app{border-color:rgba(255,255,255,.06);}
+.side{height:100%; overflow:hidden; position:static; display:flex; flex-direction:column;}
+.main{height:100%; min-height:0; overflow:hidden;}
+.topbar{position:static; background:transparent; border-bottom:1px solid var(--line);}
+.content{flex:1 1 auto; min-height:0; overflow-y:auto;}
+
+.nav a{border-radius:12px;}
+.nav a.active{background:#2a2a2c; color:#fff;}
+.nav a .badge{background:var(--gold); color:#141414;}
+
+.panel,.stat{border-radius:20px; border-color:var(--line); box-shadow:0 12px 30px -18px rgba(20,20,30,.18);}
+[data-theme="dark"] .panel,[data-theme="dark"] .stat{box-shadow:0 12px 30px -18px rgba(0,0,0,.6);}
+
+.btn{border-radius:999px; padding:9px 18px;}
+.btn-primary{background:#141414; color:#fff; border-color:#141414;}
+.btn-primary:hover{background:#2a2a2c;}
+.btn-ghost{background:var(--paper); color:var(--ink); border-color:var(--line-strong);}
+[data-theme="dark"] .btn-primary{background:var(--marine); border-color:var(--marine); color:#08201f;}
+
+.search input{border-radius:999px; background:var(--paper); border-color:var(--line-strong);}
+.chip{border-radius:999px;}
+.chip.on{background:#141414; border-color:#141414; color:#fff;}
+
+.stat .num{font-family:'Inter',system-ui,sans-serif; font-weight:600; letter-spacing:-0.03em;}
+.ch-tag,.brk-count,.chat-list-row .un,#notifBell .badge,.mono{font-family:'JetBrains Mono','IBM Plex Mono',monospace;}
+
+@media(max-width:820px){
+  body{padding:0;}
+  .app{height:auto; min-height:100vh; border-radius:0; border:0; box-shadow:none;}
+  .side{height:auto; overflow:visible;}
+  .main{height:auto; overflow:visible;}
+  .content{overflow:visible;}
+  .topbar{position:sticky; top:0;}
+}
 </style>
 <script>/* theme-init (single line so tooling that scans for the main script is unaffected) */(function(){try{var t=localStorage.getItem('b1_theme');if(t!=='dark'&&t!=='light'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 </head>
