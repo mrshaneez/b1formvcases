@@ -202,6 +202,12 @@
   .colw{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;min-width:0;}
   .colw .bar{width:100%;max-width:34px;background:var(--line);border-radius:4px 4px 0 0;overflow:hidden;display:flex;flex-direction:column;transition:opacity .15s;}
   .colw .bar .ybar-seg{width:100%;flex-shrink:0;}
+  .seg{display:inline-flex;background:var(--wash);border-radius:12px;padding:3px;gap:2px;}
+  .seg button{border:0;background:transparent;border-radius:9px;padding:5px 12px;font-size:12px;font-weight:500;color:var(--slate);cursor:pointer;font-family:inherit;}
+  .seg button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+  .cols-time{height:150px;gap:4px;}
+  .cols-time .colw .cl{font-size:10px;white-space:nowrap;}
+  .cols-time .colw .bar{max-width:46px;border-radius:5px 5px 0 0;}
   .cat-chips{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;}
   .cat-chips .chip{cursor:pointer;}
   .cat-chips .chip.dim{opacity:.4;}
@@ -955,6 +961,10 @@ body{background:radial-gradient(120% 80% at 50% 0%, #F1F2F4 0%, #E3E4E7 70%) fix
           <div class="dash-block third" data-block="chartType">
             <div class="dash-ctl"></div>
             <div class="panel" style="height:100%;"><div class="panel-head"><h2>By category</h2><span class="link" onclick="toggleCat('')">Clear</span></div><div class="chart-body" id="chartType"></div></div>
+          </div>
+          <div class="dash-block full" data-block="concluded">
+            <div class="dash-ctl"></div>
+            <div class="panel" style="height:100%;"><div class="panel-head"><h2>Concluded cases <span class="badge" id="concludedTotBadge"></span></h2><div class="seg" id="concludedSeg"><button data-g="day" onclick="setConcludedGran('day')">Day</button><button data-g="week" onclick="setConcludedGran('week')">Week</button><button data-g="month" onclick="setConcludedGran('month')">Month</button><button data-g="year" onclick="setConcludedGran('year')">Year</button></div></div><div class="chart-body" id="chartConcluded"></div></div>
           </div>
           <div class="dash-block half" data-block="recent">
             <div class="dash-ctl"></div>
@@ -4859,6 +4869,67 @@ function renderCharts(){
     : '<div class="empty">No cases match.</div>';
 }
 
+/* ===== Concluded cases over time (day / week / month / year) ===== */
+let concludedGran = 'month';
+function setConcludedGran(g){ concludedGran = g; renderConcludedChart(); }
+function isoWeekKey(dt){
+  const d = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()));
+  const day = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil((((d - yStart) / 86400000) + 1) / 7);
+  return d.getUTCFullYear() + '-W' + String(wk).padStart(2, '0');
+}
+// The conclusion date of a concluded case (verdict / withdrawn / transferred), else ''.
+function concludedDateOf(x){
+  if(!CONCLUDED_STAGES.includes(x.stage)) return '';
+  const d = caseDuration(x); return (d && d.end) ? d.end : '';
+}
+function concludedBuckets(){
+  const gran = concludedGran;
+  const dates = vcases().map(concludedDateOf).filter(Boolean);
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const keys = []; const labels = {}; let keyOf;
+  if(gran === 'day'){
+    keyOf = d => d;
+    for(let i=13;i>=0;i--){ const dt=new Date(now); dt.setDate(now.getDate()-i); const k=dt.toISOString().slice(0,10);
+      keys.push(k); labels[k]= pad(dt.getDate())+' '+MON[dt.getMonth()]; }
+  } else if(gran === 'week'){
+    keyOf = d => isoWeekKey(new Date(d+'T00:00:00'));
+    for(let i=11;i>=0;i--){ const dt=new Date(now); dt.setDate(now.getDate()-i*7); const k=isoWeekKey(dt);
+      if(!keys.includes(k)){ keys.push(k); labels[k]='W'+k.split('-W')[1]; } }
+  } else if(gran === 'year'){
+    keyOf = d => d.slice(0,4);
+    const yrs = dates.map(d=>+d.slice(0,4));
+    const minY = yrs.length ? Math.min(...yrs) : now.getFullYear();
+    for(let y=minY;y<=now.getFullYear();y++){ const k=String(y); keys.push(k); labels[k]=k; }
+  } else {
+    keyOf = d => d.slice(0,7);
+    for(let i=11;i>=0;i--){ const dt=new Date(now.getFullYear(), now.getMonth()-i, 1); const k=dt.getFullYear()+'-'+pad(dt.getMonth()+1);
+      keys.push(k); labels[k]= MON[dt.getMonth()] + ((dt.getMonth()===0 || i===11) ? " '"+String(dt.getFullYear()).slice(-2) : ''); }
+  }
+  const counts = {}; keys.forEach(k=>counts[k]=0);
+  let shown = 0;
+  dates.forEach(d=>{ const k=keyOf(d); if(k in counts){ counts[k]++; shown++; } });
+  return { keys, labels, counts, shown, grandTotal: dates.length };
+}
+function renderConcludedChart(){
+  const el = document.getElementById('chartConcluded'); if(!el) return;
+  const seg = document.getElementById('concludedSeg');
+  if(seg) seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.g===concludedGran));
+  const { keys, labels, counts, grandTotal } = concludedBuckets();
+  const badge = document.getElementById('concludedTotBadge'); if(badge) badge.textContent = grandTotal ? String(grandTotal) : '';
+  const max = Math.max(...keys.map(k=>counts[k]), 1);
+  el.innerHTML = keys.length ? `<div class="cols cols-time">
+    ${keys.map(k=>{ const n=counts[k]; const H=n?Math.max(Math.round(n/max*100),3):0;
+      return `<div class="colw" title="${labels[k]}: ${n} concluded">
+        <span class="cv">${n||''}</span>
+        <div class="bar" style="height:${H}px">${n?`<span class="ybar-seg" style="flex:1;background:var(--ink)"></span>`:''}</div>
+        <span class="cl">${labels[k]}</span></div>`; }).join('')}
+  </div>` : '<div class="empty">No concluded cases yet.</div>';
+}
+
 
 /* ===== Editable dashboard layout (per user) ===== */
 let dashEditing = false;
@@ -4867,6 +4938,7 @@ const DASH_DEFAULT = [
   {id:'chartStage',size:'third'},
   {id:'chartYear', size:'third'},
   {id:'chartType', size:'third'},
+  {id:'concluded', size:'full'},
   {id:'recent',   size:'half'},
   {id:'upcoming', size:'half'},
   {id:'apps',     size:'half'},
@@ -5172,6 +5244,7 @@ function render(){
 
   renderDash();
   renderCharts();
+  if(typeof renderConcludedChart==='function') renderConcludedChart();
   renderHearings();
   renderFullTasks();
   renderDrawer();
