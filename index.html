@@ -202,6 +202,9 @@
   .colw{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;min-width:0;}
   .colw .bar{width:100%;max-width:34px;background:var(--line);border-radius:4px 4px 0 0;overflow:hidden;display:flex;flex-direction:column;transition:opacity .15s;}
   .colw .bar .ybar-seg{width:100%;flex-shrink:0;}
+  .cat-chips{display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;}
+  .cat-chips .chip{cursor:pointer;}
+  .cat-chips .chip.dim{opacity:.4;}
   .colw.on .bar{outline:2px solid var(--ink);outline-offset:1px;}
   .colw.dim .bar{opacity:.35;}
   .colw .cv{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);}
@@ -951,7 +954,7 @@ body{background:radial-gradient(120% 80% at 50% 0%, #F1F2F4 0%, #E3E4E7 70%) fix
           </div>
           <div class="dash-block third" data-block="chartType">
             <div class="dash-ctl"></div>
-            <div class="panel" style="height:100%;"><div class="panel-head"><h2>Case types</h2><span class="link" onclick="toggleType('')">Clear</span></div><div class="chart-body" id="chartType"></div></div>
+            <div class="panel" style="height:100%;"><div class="panel-head"><h2>By category</h2><span class="link" onclick="toggleCat('')">Clear</span></div><div class="chart-body" id="chartType"></div></div>
           </div>
           <div class="dash-block half" data-block="recent">
             <div class="dash-ctl"></div>
@@ -4785,6 +4788,11 @@ function toggleYear(y){
   el.value = (el.value===y) ? '' : y;
   render();
 }
+function toggleCat(k){
+  const el = document.getElementById('filterCat'); if(!el) return;
+  el.value = (el.value===k) ? '' : k;
+  render();
+}
 function toggleType(t){
   const el = document.getElementById('filterType');
   el.value = (el.value===t) ? '' : t;
@@ -4839,17 +4847,16 @@ function renderCharts(){
     }).join('')}
   </div>` : '<div class="empty">No cases match.</div>';
 
-  // --- type horizontal bars ---
-  const byType = facetCases('type');
-  const tc = {}; byType.forEach(x=>{ const t = String(x.type||'').trim(); if(t) tc[t]=(tc[t]||0)+1; });
-  const types = Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,7);
-  const maxT = Math.max(...types.map(([,n])=>n), 1);
-  document.getElementById('chartType').innerHTML = types.length ? types.map(([t,n])=>
-    `<div class="hbar-row ${F.ty===t?'on':''} ${F.ty&&F.ty!==t?'dim':''}" onclick="toggleType('${esc(t).replace(/'/g,"\\'")}')">
-      <span class="hl thaana" dir="auto" title="${esc(t)}">${esc(t)}</span>
-      <span class="track"><span class="fill" style="width:${Math.round(n/maxT*100)}%"></span></span>
-      <span class="hc">${n}</span></div>`).join('')
-    : '<div class="empty">No typed cases match.</div>';
+  // --- cases grouped by category (chips) ---
+  const byCat = facetCases('cat');
+  const cc = {}; let uncat = 0;
+  byCat.forEach(x=>{ const k = caseCategory(x); if(k) cc[k]=(cc[k]||0)+1; else uncat++; });
+  const curCat = (document.getElementById('filterCat')||{}).value||'';
+  const catList = CASE_CATEGORIES.map(([k,l])=>[k,l,cc[k]||0]).filter(a=>a[2]>0).sort((a,b)=>b[2]-a[2]);
+  const catChip = (k,l,n)=>`<button class="chip ${curCat===k?'on':''} ${curCat&&curCat!==k?'dim':''}" onclick="toggleCat('${k}')">${esc(l)} · ${n}</button>`;
+  document.getElementById('chartType').innerHTML = (catList.length||uncat)
+    ? `<div class="cat-chips">${catList.map(([k,l,n])=>catChip(k,l,n)).join('')}${uncat?catChip('__none__','Uncategorised',uncat):''}</div>`
+    : '<div class="empty">No cases match.</div>';
 }
 
 
