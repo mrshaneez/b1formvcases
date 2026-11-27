@@ -208,6 +208,8 @@
   .cols-time{height:150px;gap:4px;}
   .cols-time .colw .cl{font-size:10px;white-space:nowrap;}
   .cols-time .colw .bar{max-width:46px;border-radius:5px 5px 0 0;}
+  .cols-time .ybar-seg{cursor:pointer;}
+  .cols-time .ybar-seg:hover{filter:brightness(1.12);}
   .cat-dot{display:inline-block;width:9px;height:9px;border-radius:3px;flex:0 0 auto;margin-inline-end:6px;vertical-align:middle;}
   .cat-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--slate);}
   .cat-leg{display:inline-flex;align-items:center;}
@@ -2026,6 +2028,7 @@ let lastShown = [];
 let donutClosed = false;
 let concludedFilter = false;
 let benchFilter = false;
+let concludedSel = null;   // {gran,key,cat} drill-down from the Concluded-cases graph
 let contacts = {};
 let settings = { sectionName:'Section B1', courtName:'High Court of the Maldives',
   calColors: { task:'#c9922b', overdue:'#d64545', done:'#3f9d5a', deadline:'#7b61b8', unassigned:'#8a94a6' },
@@ -2419,7 +2422,7 @@ function setJudgeScope(s){ judgeScope = s; render(); }
 // Jump from a dashboard card to the Cases page, scoped to presiding / participating / all bench cases.
 function judgeScopeTo(scope){
   judgeScope = scope;
-  benchFilter = false; concludedFilter = false;
+  benchFilter = false; concludedFilter = false; concludedSel = null;
   if(typeof setStageQuiet==='function') setStageQuiet('');
   show('cases');
 }
@@ -4696,12 +4699,12 @@ function concludedThisYear(x){
   return !!(d && d.end && d.end.slice(0,4) === String(new Date().getFullYear()));
 }
 function showMyBench(){
-  benchFilter = true; concludedFilter = false; setStageQuiet('');
+  benchFilter = true; concludedFilter = false; concludedSel = null; setStageQuiet('');
   show('cases'); render();
 }
-function clearBench(){ benchFilter = false; if(currentView!=='cases') show('cases'); render(); }
+function clearBench(){ benchFilter = false; concludedSel = null; if(currentView!=='cases') show('cases'); render(); }
 function toggleConcluded(){
-  benchFilter = false;
+  benchFilter = false; concludedSel = null;
   concludedFilter = !concludedFilter;
   if(concludedFilter) setStageQuiet('');
   if(currentView!=='cases') show('cases');
@@ -4896,6 +4899,34 @@ function concludedDateOf(x){
   if(!CONCLUDED_STAGES.includes(x.stage)) return '';
   const d = caseDuration(x); return (d && d.end) ? d.end : '';
 }
+// Bucket key for a date under a given granularity (shared by the graph and the drill-down filter).
+function concludedKeyOf(d, gran){
+  if(!d) return '';
+  if(gran==='day') return d;
+  if(gran==='week') return isoWeekKey(new Date(d+'T00:00:00'));
+  if(gran==='year') return d.slice(0,4);
+  return d.slice(0,7);
+}
+// A readable label for a bucket key (for the filter banner).
+function concludedLabelFor(gran, key){
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if(gran==='year') return key;
+  if(gran==='week'){ const [y,w]=key.split('-W'); return `Week ${w}, ${y}`; }
+  if(gran==='day'){ const [y,m,dd]=key.split('-'); return `${+dd} ${MON[+m-1]} ${y}`; }
+  const [y,m]=key.split('-'); return `${MON[+m-1]} ${y}`;
+}
+// Drill down into one bar / segment: show just those concluded cases in the Cases list.
+function openConcludedBucket(gran, key, cat){
+  cat = cat || '';
+  if(concludedSel && concludedSel.gran===gran && concludedSel.key===key && (concludedSel.cat||'')===cat && currentView==='cases'){
+    concludedSel = null; render(); return;   // tapping the active bar again clears it
+  }
+  concludedSel = { gran, key, cat };
+  benchFilter = false; concludedFilter = false; setStageQuiet('');
+  if(currentView!=='cases') show('cases');
+  render();
+}
+function clearConcludedSel(){ concludedSel = null; render(); }
 function concludedBuckets(){
   const gran = concludedGran;
   const items = vcases().filter(x=>CONCLUDED_STAGES.includes(x.stage))
@@ -4937,11 +4968,13 @@ function renderConcludedChart(){
   const badge = document.getElementById('concludedTotBadge'); if(badge) badge.textContent = grandTotal ? String(grandTotal) : '';
   const max = Math.max(...keys.map(k=>counts[k]), 1);
   const catOrder = CASE_CATEGORIES.map(([k])=>k).concat('__none__');
+  const sel = concludedSel && concludedSel.gran===concludedGran ? concludedSel : null;
   el.innerHTML = keys.length ? `<div class="cols cols-time">
     ${keys.map(k=>{ const n=counts[k]; const H=n?Math.max(Math.round(n/max*100),3):0;
+      const onK = sel && sel.key===k;
       const segs = catOrder.filter(c=>catBy[k][c]).map(c=>
-        `<span class="ybar-seg" style="flex:${catBy[k][c]} 0 0;background:${catColor(c)}" title="${catName(c)}: ${catBy[k][c]}"></span>`).join('');
-      return `<div class="colw" title="${labels[k]}: ${n} concluded">
+        `<span class="ybar-seg" style="flex:${catBy[k][c]} 0 0;background:${catColor(c)}" title="${catName(c)}: ${catBy[k][c]} — tap to open" onclick="event.stopPropagation();openConcludedBucket('${concludedGran}','${k}','${c}')"></span>`).join('');
+      return `<div class="colw ${onK?'on':''} ${sel&&!onK?'dim':''}" title="${labels[k]}: ${n} concluded${n?' — tap to open':''}" ${n?`onclick="openConcludedBucket('${concludedGran}','${k}')"`:''}>
         <span class="cv">${n||''}</span>
         <div class="bar" style="height:${H}px">${segs}</div>
         <span class="cl">${labels[k]}</span></div>`; }).join('')}
@@ -5225,12 +5258,14 @@ function render(){
 
   const order = {'Ready for Verdict':0,'Shared for Opinion':1,'Judgment Drafting':2,'Hearings Finished':3,'In Progress':4,'Not Started':5,'On Hold':6,'Verdict Done':7,'Withdrawn':8,'Transferred Out':9};
   const shown = filtered
-    .filter(x => benchFilter ? onBench(x) : (concludedFilter ? concludedThisYear(x) : (stageFilter ? x.stage===stageFilter : ACTIVE_STAGES.includes(x.stage))))
+    .filter(x => benchFilter ? onBench(x)
+      : concludedSel ? (CONCLUDED_STAGES.includes(x.stage) && concludedKeyOf(concludedDateOf(x), concludedSel.gran)===concludedSel.key && (!concludedSel.cat || (concludedSel.cat==='__none__' ? !caseCategory(x) : caseCategory(x)===concludedSel.cat)))
+      : (concludedFilter ? concludedThisYear(x) : (stageFilter ? x.stage===stageFilter : ACTIVE_STAGES.includes(x.stage))))
     .sort((a,b)=> (order[a.stage]??9)-(order[b.stage]??9) || String(a.caseNo).localeCompare(String(b.caseNo)));
 
   lastShown = shown;
   document.getElementById('shownCount').textContent =
-    `Showing ${shown.length} case${shown.length===1?'':'s'}` + (benchFilter?' \u00b7 On my bench':(concludedFilter?` \u00b7 Concluded in ${new Date().getFullYear()}`:(stageFilter?` \u00b7 ${stageFilter}`:''))) + (anyFilter?' \u00b7 filters applied':'');
+    `Showing ${shown.length} case${shown.length===1?'':'s'}` + (benchFilter?' \u00b7 On my bench':(concludedSel?` \u00b7 Concluded \u00b7 ${concludedLabelFor(concludedSel.gran, concludedSel.key)}${concludedSel.cat?' \u00b7 '+catName(concludedSel.cat):''}`:(concludedFilter?` \u00b7 Concluded in ${new Date().getFullYear()}`:(stageFilter?` \u00b7 ${stageFilter}`:'')))) + (anyFilter?' \u00b7 filters applied':'');
 
   const body = document.getElementById('casesBody');
   if(!shown.length){
@@ -10560,14 +10595,14 @@ function clearFiltersQuiet(){
   document.getElementById('search').value='';
   ['filterPri','filterYear','filterStage','filterType','filterCat','filterApp','filterRes','filterInt','filterLaw','filterJud','filterRep','filterOpn','filterOrder'].forEach(i=>{const e=document.getElementById(i); if(e) e.value='';});
 }
-function clearFilters(){ clearFiltersQuiet(); stageFilter=''; concludedFilter=false; benchFilter=false; render(); }
+function clearFilters(){ clearFiltersQuiet(); stageFilter=''; concludedFilter=false; benchFilter=false; concludedSel=null; render(); }
 // True when any case filter is in effect (search text, a filter dropdown, or a stage/bench/concluded chip).
 function filtersActive(){
   const F = getFilters();
   return !!(F.q || F.pri || F.yr || F.ty || F.cat || F.fap || F.fre || F.fin || F.flw || F.fjd || F.frs || F.fop || F.ord || stageFilter || concludedFilter || benchFilter);
 }
 function setStageQuiet(s){ stageFilter=s; document.getElementById('filterStage').value=s; }
-function setStage(s){ concludedFilter=false; benchFilter=false; if(s && stageFilter===s) s=''; setStageQuiet(s); render(); }
+function setStage(s){ concludedFilter=false; benchFilter=false; concludedSel=null; if(s && stageFilter===s) s=''; setStageQuiet(s); render(); }
 function toggleRep(rs){
   const el = document.getElementById('filterRep');
   el.value = (el.value===rs) ? '' : rs;
