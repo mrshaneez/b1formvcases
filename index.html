@@ -565,6 +565,7 @@
   .md-red{background:var(--red);} .md-amber{background:var(--amber);} .md-blue{background:#3a6b8a;} .md-marine{background:var(--marine);} .md-gold{background:var(--gold);} .md-slate{background:var(--slate);}
   .md-item-main{flex:1;min-width:0;} .md-item-main b{font-size:13.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .md-sub{font-size:11.5px;color:var(--slate);display:block;margin-top:1px;}
+  .md-tag{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--wash);border:1px solid var(--line);border-radius:5px;padding:0 5px;color:var(--slate-2);}
   .md-hi{font-size:9.5px;font-weight:700;color:#fff;background:var(--red);border-radius:9px;padding:1px 6px;margin-inline-start:5px;vertical-align:middle;text-transform:uppercase;letter-spacing:.03em;}
   .md-empty{color:var(--slate);font-size:13px;padding:6px 2px;}
   @media(max-width:640px){ .md-grid{grid-template-columns:1fr;} }
@@ -5408,6 +5409,50 @@ function myDayData(D){
   priCases.sort((a,b)=> prank(a.state)-prank(b.state) || (b.high?1:0)-(a.high?1:0) || String(a.due||'9999').localeCompare(String(b.due||'9999')));
   return {D,T,hearings,urgent,ongoing,upcoming,apps,tgs,opDeadlines,chOp,priCases};
 }
+// Look up a person's role from their username / display name (judge, staff, participant, admin).
+function userRoleByName(n){
+  if(!n) return '';
+  const u = (users||[]).find(u=> u && (u.username===n || u.displayName===n || u.linkedName===n));
+  return u ? u.role : '';
+}
+// For a staff member: the chats, notes and tasks directed to them, split by source — from judges
+// vs from parties. Chats are taken from the staff's cases within the last 7 days (up to the viewed
+// day); notes are ones shared with the staff; tasks are ones assigned to the staff.
+function myDayStaffInbox(D){
+  const me_ = me(); const out = { judge:[], party:[] };
+  if(!me_) return out;
+  const myNm = myName();
+  const start = mdPlus(D,-7);
+  const within = d => d && d<=D && d>=start;
+  // Tasks assigned to me
+  (typeof allTasks==='function'?allTasks():[]).forEach(t=>{
+    if(!t || t.status==='done' || t.assignee!==myNm) return;
+    const it = { kind:'task', caseNo:t.caseNo, caseId:t.caseId, text:t.text||'Task', who:t.by||'', date:t.created||'', due:t.due||'' };
+    const jr = t.byRole==='Judge' || userRoleByName(t.by)==='judge' || userRoleByName(t.by)==='admin';
+    const pr = userRoleByName(t.by)==='participant';
+    if(pr) out.party.push(it); else out.judge.push(it);   // tasks to staff default to the judge side
+  });
+  // Notes shared with me
+  try{ (notesLoad().notes||[]).forEach(n=>{
+    if(!n || !n.sharedBy) return;
+    const r = userRoleByName(n.sharedBy) || userRoleByName(n.sharedByName);
+    const it = { kind:'note', noteId:n.id, text:(notesPlain(n.html)||n.title||'Note'), who:n.sharedByName||n.sharedBy, date:String(n.sharedAt||'').slice(0,10) };
+    if(r==='judge'||r==='admin') out.judge.push(it); else if(r==='participant') out.party.push(it);
+  }); }catch(e){}
+  // Chats in my cases, recent, authored by a judge or a party
+  vcases().forEach(x=>{ (x.chat||[]).forEach(m=>{
+    if(!m || m.del || m.by===me_.username) return;
+    const d = String(m.at||'').slice(0,10); if(!within(d)) return;
+    const it = { kind:'chat', caseNo:x.caseNo, caseId:x.id, text:m.text||'', who:m.byName||m.by||'', date:d, time:String(m.at||'').slice(11,16) };
+    if(m.role==='judge'||m.role==='admin') out.judge.push(it); else if(m.role==='participant') out.party.push(it);
+  }); });
+  const byDate = (a,b)=> String(b.date+(b.time||'')).localeCompare(String(a.date+(a.time||'')));
+  out.judge.sort(byDate); out.party.sort(byDate);
+  out.judge = out.judge.slice(0,20); out.party = out.party.slice(0,20);
+  return out;
+}
+function openNoteFromDay(id){ try{ noteSel = id; }catch(e){} show('notes'); if(typeof renderNotes==='function') renderNotes(); }
+
 function renderMyDay(){
   const el=document.getElementById('mydayBody'); if(!el) return;
   const D=myDayDate, T=mdToday();
@@ -5429,6 +5474,15 @@ function renderMyDay(){
      <span class="md-datelabel">${dateLabel}</span>
    </div>
    <div class="md-grid">
+     ${(()=>{ const _u=me(); if(!(_u && _u.role==='staff')) return '';
+        const inbox = myDayStaffInbox(D);
+        const tagOf = k => k==='chat'?'Chat':k==='note'?'Note':'Task';
+        const dotOf = k => k==='chat'?'md-marine':k==='note'?'md-gold':'md-blue';
+        const openOf = it => it.kind==='note' ? `openNoteFromDay('${it.noteId}')` : (it.caseId?`openCase('${it.caseId}')`:`show('cases')`);
+        const row = it => `<div class="md-item" onclick="${openOf(it)}"><span class="md-dot ${dotOf(it.kind)}"></span><span class="md-item-main"><b class="thaana" dir="auto">${esc(String(it.text||'').slice(0,90))||'\u2014'}</b><span class="md-sub"><span class="md-tag">${tagOf(it.kind)}</span>${it.caseNo?' \u00b7 '+esc(it.caseNo):''}${it.who?' \u00b7 '+esc(it.who):''}${it.date?' \u00b7 '+fmtDate(it.date):''}</span></span></div>`;
+        return section('From judges','s-marine', inbox.judge.length, inbox.judge.length?inbox.judge.map(row).join(''):empty('No chats, notes or tasks from judges.'))
+             + section('From the parties','s-amber', inbox.party.length, inbox.party.length?inbox.party.map(row).join(''):empty('Nothing from the parties.'));
+     })()}
      ${section('Hearings','s-marine',d.hearings.length, d.hearings.length?d.hearings.map(h=>`<div class="md-item" onclick="openCase('${h.caseId}')"><span class="md-dot md-marine"></span><span class="md-item-main"><b>${esc(h.caseNo||'\u2014')}</b><span class="md-sub">${h.time?esc(h.time)+' \u00b7 ':''}${esc(h.label)}</span></span></div>`).join(''):empty('No hearings on this day.'))}
      ${(typeof isJudgeUser==='function' && isJudgeUser()) ? section('My opinion \u00b7 Chambers','s-purple',d.chOp.length, d.chOp.length?d.chOp.map(o=>`<div class="md-item" onclick="${o.caseId?`openCase('${o.caseId}')`:`openChambersTab('awaiting_mine')`}"><span class="md-dot ${o.state==='due'?'md-red':(o.state==='soon'?'md-amber':'md-blue')}"></span><span class="md-item-main"><b>${esc(o.caseNo||'\u2014')}</b><span class="md-sub">${o.state==='due'?(o.deadline?`Opinion due ${fmtDate(o.deadline)}${o.deadline<T?' \u00b7 overdue':''}`:'Opinion due'):(o.state==='soon'?`Getting due \u00b7 ${fmtDate(o.deadline)}`:'Opinion pending')}${o.presiding?` \u00b7 from ${esc(o.presiding)}`:''}</span></span></div>`).join(''):empty('Nothing in Chambers needs your opinion right now.')) : ''}
      ${section('Priority & deadlines \u00b7 Cases','s-red',d.priCases.length, d.priCases.length?d.priCases.map(c=>`<div class="md-item" onclick="openCase('${c.caseId}')"><span class="md-dot ${c.state==='due'?'md-red':(c.state==='soon'?'md-amber':(c.high?'md-red':'md-blue'))}"></span><span class="md-item-main"><b>${esc(c.caseNo||'\u2014')}${c.high?' <span class="md-hi">High</span>':''}</b><span class="md-sub">${esc(c.stage||'')}${c.due?` \u00b7 conclude by ${fmtDate(c.due)}${c.due<D?' \u00b7 overdue':''}`:''}</span></span></div>`).join(''):empty('No high-priority or due cases.'))}
